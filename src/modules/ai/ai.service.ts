@@ -9,13 +9,14 @@ import {
     SummaryOptions,
     PromptTemplate,
     OPENAI_MODELS,
+    AIServiceConfig
 } from './ai.interface';
 
 @Injectable()
 export class AiService implements OnModuleInit {
     private readonly logger = new Logger(AiService.name);
     private readonly openai: OpenAI;
-    private readonly defaultModel = OPENAI_MODELS.GPT_3_5_TURBO;
+    private readonly defaultModel: string = OPENAI_MODELS.GPT_3_5_TURBO;
     private readonly defaultPrompts: PromptTemplate[] = [
         {
             name: 'summary',
@@ -52,7 +53,7 @@ export class AiService implements OnModuleInit {
     ];
 
     constructor(private readonly configService: ConfigService) {
-        const apiKey = this.configService.getOrThrow<string>('OPENAI_API_KEY');
+        const apiKey = this.configService.getOrThrow('OPENAI_API_KEY') as string;
         this.openai = new OpenAI({
             apiKey,
         });
@@ -60,7 +61,7 @@ export class AiService implements OnModuleInit {
 
     async onModuleInit() {
         try {
-            this.configService.getOrThrow<string>('OPENAI_API_KEY');
+            this.configService.getOrThrow('OPENAI_API_KEY');
         } catch (error) {
             this.logger.error('未设置OpenAI API密钥！');
             throw new Error('Missing OpenAI API key');
@@ -112,7 +113,7 @@ export class AiService implements OnModuleInit {
                 originalTitle: request.title,
                 summary: summaryResult,
                 keyPoints,
-                language: options.language,
+                language: options.language || 'zh',
                 tokenCount: this.estimateTokenCount(summaryResult),
                 processingTime: Date.now() - startTime,
             };
@@ -141,7 +142,8 @@ export class AiService implements OnModuleInit {
     }
 
     private getModelName(): string {
-        return this.configService.get<string>('OPENAI_API_MODEL', this.defaultModel);
+        const modelName = this.configService.get('OPENAI_API_MODEL');
+        return modelName || this.defaultModel;
     }
 
     private async callOpenAI(prompt: string): Promise<string> {
@@ -214,10 +216,9 @@ export class AiService implements OnModuleInit {
 
     private estimateTokenCount(text: string): number {
         // 简单估算：中文每字算1个token，英文每4个字符算1个token
-        const chineseLength = (text.match(/[-]/g) || []).length;
-        const englishLength = Math.ceil(
-            (text.length - chineseLength) / 4
-        );
+        const chineseLength = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+        const nonChineseText = text.replace(/[\u4e00-\u9fa5]/g, '');
+        const englishLength = Math.ceil(nonChineseText.length / 4);
         return chineseLength + englishLength;
     }
 }

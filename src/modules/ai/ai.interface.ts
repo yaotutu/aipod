@@ -1,7 +1,7 @@
 export type AIModelName = string;
 
 export interface AIModelConfig {
-    modelName: AIModelName | undefined;
+    modelName: string;
     temperature?: number;
     maxTokens?: number;
     topP?: number;
