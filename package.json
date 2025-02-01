@@ -30,6 +30,8 @@
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
     "franc": "^6.2.0",
+    "iconv-lite": "^0.6.3",
+    "jschardet": "^3.1.4",
     "openai": "^4.81.0",
     "reading-time": "^1.5.0",
     "reflect-metadata": "^0.2.2",
