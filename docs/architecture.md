@@ -18,6 +18,60 @@
 - 内容格式标准化
 - 关键信息提取(标题、作者、日期等)
 
+#### 2.1 内容处理链设计
+采用责任链模式实现可扩展的内容处理系统，包含以下处理器：
+
+##### HTML清理处理器 (HtmlCleanerProcessor)
+- 移除不安全和不需要的HTML标签（如script、style等）
+- 保留有意义的格式标签（如p、h1-h6等）
+- 可配置的标签白名单和黑名单
+- 默认保留：p、h1-h6、ul、ol、li、a、img等
+- 默认移除：script、style、iframe、form、noscript等
+
+##### 空白字符处理器 (WhitespaceProcessor)
+- 规范化空格和缩进
+- 处理多余的换行符
+- 统一文本格式
+- 可配置最大连续换行数
+- 支持缩进标准化
+
+##### 字符转换处理器 (CharacterConverterProcessor)
+- 全角字符转半角
+- 统一引号格式
+- 标准化标点符号
+- 支持自定义字符映射
+- 可配置转换规则
+
+#### 2.2 处理器配置
+每个处理器支持独立配置：
+```typescript
+{
+  htmlCleaner: {
+    enabled: true,
+    removeElements: ['script', 'style'],
+    preserveElements: ['p', 'h1', 'h2', 'a']
+  },
+  whitespace: {
+    enabled: true,
+    normalizeIndentation: true,
+    maxConsecutiveNewlines: 2
+  },
+  characterConverter: {
+    enabled: true,
+    convertFullWidthToHalfWidth: true,
+    normalizeQuotes: true,
+    normalizePunctuation: true
+  }
+}
+```
+
+#### 2.3 扩展性设计
+- 基于BaseProcessor抽象类
+- 支持动态注册新处理器
+- 处理器链可动态配置
+- 每个处理器可独立启用/禁用
+- 支持处理器顺序调整
+
 ### 3. AI处理模块
 - 接入大语言模型
 - 内容摘要生成
@@ -40,6 +94,9 @@
 ### 数据流
 1. RSS爬虫定时任务 -> 原始数据获取
 2. 数据清洗服务 -> 结构化数据
+   - HTML清理
+   - 空白字符处理
+   - 字符标准化
 3. AI处理服务 -> 优化内容
 4. 播客生成服务 -> 最终输出
 
