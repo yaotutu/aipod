@@ -5,7 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { RssModule } from './modules/rss/rss.module';
 import { ProcessorModule } from './modules/processor/processor.module';
-import { AiModule } from './modules/ai/ai.module';
+// import { AiModule } from './modules/ai/ai.module';  // 暂时禁用AI模块
 
 @Module({
   imports: [
@@ -16,7 +16,7 @@ import { AiModule } from './modules/ai/ai.module';
     ScheduleModule.forRoot(),
     RssModule,
     ProcessorModule,
-    AiModule,
+    // AiModule,  // 暂时禁用AI模块
   ],
   controllers: [AppController],
   providers: [AppService],

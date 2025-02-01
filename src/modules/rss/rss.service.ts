@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import Parser from 'rss-parser';
+import * as Parser from 'rss-parser';
 import axios from 'axios';
 import { RssSource, RssItem, RssProcessingResult } from './rss.interface';
 import { ProcessorService } from '../processor/processor.service';
@@ -10,7 +10,26 @@ import { ProcessingOptions } from '../processor/processor.interface';
 export class RssService {
     private readonly logger = new Logger(RssService.name);
     private readonly parser: Parser;
-    private readonly sources: RssSource[] = []; // TODO: 将来从数据库获取
+    private readonly sources: RssSource[] = [
+        {
+            id: 'ruanyf-weekly',
+            name: '阮一峰的周刊',
+            url: 'https://feeds.feedburner.com/ruanyifeng',
+            description: '科技爱好者周刊，每周分享科技见闻、编程技巧、工具资源',
+            updateInterval: 60 * 24, // 每天检查一次
+            isActive: true,
+            lastUpdate: new Date()
+        },
+        {
+            id: 'guanguans-robot',
+            name: 'GuanGuans Robot',
+            url: 'https://guanguans.cn/feed',
+            description: '编程、开源、技术分享',
+            updateInterval: 60 * 12, // 每12小时检查一次
+            isActive: true,
+            lastUpdate: new Date()
+        }
+    ]; // TODO: 将来从数据库获取
 
     constructor(private readonly processorService: ProcessorService) {
         this.parser = new Parser({

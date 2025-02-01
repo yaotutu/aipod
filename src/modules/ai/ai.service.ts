@@ -76,8 +76,8 @@ export class AiService implements OnModuleInit {
             maxLength: request.options?.maxLength || 300,
             format: request.options?.format || 'detailed',
             language: request.options?.language || 'zh',
-            includeTags: request.options?.includeTags ?? true,
-            includeTopics: request.options?.includeTopics ?? true,
+            includeTags: true,  // 默认总是包含标签
+            includeTopics: true, // 默认总是包含主题
         };
 
         try {
@@ -108,25 +108,22 @@ export class AiService implements OnModuleInit {
                 .filter(line => line.trim().length > 0)
                 .map(point => point.replace(/^[•\-\d\.\s]+/, '').trim());
 
+            // 生成标签和主题
+            const tagsAndTopics = await this.generateTagsAndTopics(request);
+
             const result: ContentSummaryResult = {
                 id: request.id,
                 originalTitle: request.title,
                 summary: summaryResult,
                 keyPoints,
+                tags: tagsAndTopics.tags,
+                topics: tagsAndTopics.topics,
                 language: options.language || 'zh',
                 tokenCount: this.estimateTokenCount(summaryResult),
                 processingTime: Date.now() - startTime,
+                sourceType: this.detectSourceType(request.content),
+                confidence: 0.85, // 添加默认置信度
             };
-
-            if (options.includeTags || options.includeTopics) {
-                const tagsAndTopics = await this.generateTagsAndTopics(request);
-                if (options.includeTags) {
-                    result.tags = tagsAndTopics.tags;
-                }
-                if (options.includeTopics) {
-                    result.topics = tagsAndTopics.topics;
-                }
-            }
 
             return {
                 success: true,
@@ -214,10 +211,23 @@ export class AiService implements OnModuleInit {
         }
     }
 
+    private detectSourceType(content: string): 'article' | 'news' | 'blog' {
+        const length = content.length;
+        const paragraphs = content.split(/\n\s*\n/).length;
+
+        if (length > 3000 && paragraphs > 5) {
+            return 'article';
+        } else if (length < 1000) {
+            return 'news';
+        }
+        return 'blog';
+    }
+
     private estimateTokenCount(text: string): number {
         // 简单估算：中文每字算1个token，英文每4个字符算1个token
-        const chineseLength = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-        const nonChineseText = text.replace(/[\u4e00-\u9fa5]/g, '');
+        const chineseRegex = /[\u4e00-\u9fa5]/g;
+        const chineseLength = (text.match(chineseRegex) || []).length;
+        const nonChineseText = text.replace(chineseRegex, '');
         const englishLength = Math.ceil(nonChineseText.length / 4);
         return chineseLength + englishLength;
     }

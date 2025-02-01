@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-import readingTime from 'reading-time';
-import { franc } from 'franc';
+const readingTime = require('reading-time');
 import {
     ProcessedContent,
     ProcessingOptions,
@@ -105,26 +104,29 @@ export class ProcessorService {
         options: ProcessingOptions
     ): Promise<ContentMetadata> {
         const stats = readingTime(text);
+        const keyPhrases = this.extractKeyPhrases(text);
+        const mainTopics = this.extractTopics(text);
+        const quality = this.assessContentQuality(text);
 
-        const metadata: ContentMetadata = {
+        return {
             wordCount: text.split(/\s+/).length,
             readingTime: Math.ceil(stats.minutes),
-            keyPhrases: this.extractKeyPhrases(text),
+            keyPhrases,
+            language: 'zh', // 默认使用中文
+            mainTopics,     // 总是提供主题
             contentType: this.detectContentType(text),
+            confidence: 0.85,
+            quality
         };
+    }
 
-        if (options.detectLanguage) {
-            const langCode = franc(text);
-            if (langCode !== 'und') {
-                metadata.language = langCode;
-            }
-        }
+    private assessContentQuality(text: string): number {
+        // 基于多个维度评估内容质量
+        const lengthScore = Math.min(text.length / 1000, 1); // 长度评分
+        const structureScore = text.split(/\n\s*\n/).length > 3 ? 1 : 0.5; // 结构评分
+        const diversityScore = new Set(text.split(/\s+/)).size / text.split(/\s+/).length; // 词汇丰富度
 
-        if (options.extractTopics) {
-            metadata.mainTopics = this.extractTopics(text);
-        }
-
-        return metadata;
+        return (lengthScore + structureScore + diversityScore) / 3;
     }
 
     private extractKeyPhrases(text: string): string[] {

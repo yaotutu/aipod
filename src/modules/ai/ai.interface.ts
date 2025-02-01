@@ -28,12 +28,14 @@ export interface ContentSummaryResult {
     id: string;
     originalTitle: string;
     summary: string;
-    keyPoints?: string[];
-    tags?: string[];
-    topics?: string[];
-    language: string;
+    keyPoints: string[];     // 改为必需字段
+    tags: string[];         // 改为必需字段
+    topics: string[];       // 改为必需字段
+    language: 'zh' | 'en';  // 限制语言类型
     tokenCount: number;
     processingTime: number;
+    sourceType?: 'article' | 'news' | 'blog'; // 添加源类型
+    confidence?: number;    // 添加置信度
 }
 
 export interface AIProcessingResult {
