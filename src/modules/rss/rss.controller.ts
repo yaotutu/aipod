@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, Param, Delete, Put } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { RssProcessingResult, RssSource } from './rss.interface';
 import { RssService } from './rss.service';
-import { RssSource, RssProcessingResult } from './rss.interface';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('rss')
 @Controller('rss')
@@ -61,7 +61,33 @@ export class RssController {
         return this.rssService.testRssSource(url);
     }
 
-    @Post('sources/:id/process')
+    @Post('process')
+    @ApiOperation({ summary: '手动触发RSS源处理' })
+    @ApiResponse({ status: 200, description: '处理结果' })
+    async processAllSources(): Promise<RssProcessingResult[]> {
+        const sources = await this.rssService.getRssSources();
+        const results: RssProcessingResult[] = [];
+
+        for (const source of sources) {
+            if (source.isActive) {
+                try {
+                    const result = await this.rssService.processRssSource(source);
+                    results.push(result);
+                } catch (error) {
+                    results.push({
+                        success: false,
+                        itemsProcessed: 0,
+                        message: `处理失败: ${error.message}`,
+                        errors: [error.message],
+                    });
+                }
+            }
+        }
+
+        return results;
+    }
+
+    @Post('process/:id')
     @ApiOperation({ summary: '处理指定的RSS源' })
     @ApiParam({ name: 'id', description: 'RSS源ID' })
     @ApiResponse({ status: 200, description: '处理结果' })
@@ -70,12 +96,7 @@ export class RssController {
     ): Promise<RssProcessingResult> {
         const source = (await this.rssService.getRssSources()).find(s => s.id === id);
         if (!source) {
-            return {
-                success: false,
-                itemsProcessed: 0,
-                message: 'RSS源未找到',
-                errors: ['Invalid source ID'],
-            };
+            throw new NotFoundException(`未找到ID为 ${id} 的RSS源`);
         }
         return this.rssService.processRssSource(source);
     }

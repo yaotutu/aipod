@@ -105,6 +105,12 @@ export class ProcessorService {
         const startTime = Date.now();
 
         try {
+            this.logger.log('开始处理内容...');
+            this.logger.log('原始内容:');
+            this.logger.log('----------------------------------------');
+            this.logger.log(content);
+            this.logger.log('----------------------------------------');
+
             // 按优先级排序规则
             const sortedRules = [...this.rules].sort((a, b) => b.priority - a.priority);
 
@@ -113,15 +119,35 @@ export class ProcessorService {
             for (const rule of sortedRules) {
                 if (rule.condition(processedContent, options)) {
                     try {
+                        this.logger.log(`执行规则: ${rule.name} (优先级: ${rule.priority})`);
+                        this.logger.log('处理前内容:');
+                        this.logger.log('----------------------------------------');
+                        this.logger.log(processedContent);
+                        this.logger.log('----------------------------------------');
+
                         processedContent = rule.process(processedContent, options);
-                        this.logger.debug(`规则 ${rule.name} 处理完成`);
+
+                        this.logger.log('处理后内容:');
+                        this.logger.log('----------------------------------------');
+                        this.logger.log(processedContent);
+                        this.logger.log('----------------------------------------');
+                        this.logger.log(`规则 ${rule.name} 处理完成`);
                     } catch (error) {
                         this.logger.warn(`规则 ${rule.name} 处理失败: ${error.message}`);
                     }
+                } else {
+                    this.logger.log(`跳过规则 ${rule.name} (条件不满足)`);
                 }
             }
 
             const metadata = await this.generateMetadata(processedContent, options);
+
+            this.logger.log('处理完成，最终内容:');
+            this.logger.log('----------------------------------------');
+            this.logger.log(processedContent);
+            this.logger.log('----------------------------------------');
+            this.logger.log('元数据:');
+            this.logger.log(JSON.stringify(metadata, null, 2));
 
             const result: ProcessedContent = {
                 id,

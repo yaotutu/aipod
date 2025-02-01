@@ -55,13 +55,20 @@ export class RssService {
 
     async processRssSource(source: RssSource): Promise<RssProcessingResult> {
         try {
+            this.logger.log(`开始处理RSS源: ${source.name} (${source.url})`);
             const response = await axios.get(source.url);
             const feed = await this.parser.parseString(response.data);
+            // 测试数据,只保留feed中的items的前两条数据
+            feed.items = feed.items.slice(0, 1);
+            this.logger.log(`成功获取RSS源数据，共 ${feed.items.length} 条内容`);
 
             const items: RssItem[] = await Promise.all(
                 feed.items
                     .filter(item => item.title && (item.link || item.guid))
-                    .map(async item => {
+                    .map(async (item, index) => {
+                        this.logger.log(`\n处理第 ${index + 1}/${feed.items.length} 条内容`);
+                        this.logger.log(`标题: ${item.title}`);
+
                         const uniqueId = this.generateId(
                             [item.guid, item.link, item.title]
                                 .filter((val): val is string => !!val)[0]
@@ -81,12 +88,29 @@ export class RssService {
                             maxLength: 5000 // 限制内容长度
                         };
 
+                        this.logger.log('开始内容处理...');
                         // 使用处理器链处理内容
                         const processedResult = await this.processorService.processContent(
                             uniqueId,
                             content,
                             processingOptions
                         );
+
+                        if (processedResult.success) {
+                            this.logger.log('内容处理成功');
+                            this.logger.log(`处理时间: ${processedResult.processingTime}ms`);
+                            if (processedResult.content?.metadata) {
+                                const metadata = processedResult.content.metadata;
+                                this.logger.log('内容分析结果:');
+                                this.logger.log(`- 字数: ${metadata.wordCount}`);
+                                this.logger.log(`- 预计阅读时间: ${metadata.readingTime}分钟`);
+                                this.logger.log(`- 内容类型: ${metadata.contentType}`);
+                                this.logger.log(`- 质量评分: ${metadata.quality}`);
+                                this.logger.log(`- 关键短语: ${metadata.keyPhrases.join(', ')}`);
+                            }
+                        } else {
+                            this.logger.warn(`内容处理失败: ${processedResult.error}`);
+                        }
 
                         return {
                             id: uniqueId,
@@ -105,8 +129,8 @@ export class RssService {
                     })
             );
 
+            this.logger.log(`\n处理完成，成功处理 ${items.length} 条内容`);
             // TODO: 保存到数据库
-            this.logger.log(`从 ${source.name} 获取到 ${items.length} 条新内容`);
 
             return {
                 success: true,
@@ -114,6 +138,7 @@ export class RssService {
                 message: `成功处理 ${source.name} 的RSS源`,
             };
         } catch (error) {
+            this.logger.error(`处理RSS源失败: ${error.message}`);
             return {
                 success: false,
                 itemsProcessed: 0,
