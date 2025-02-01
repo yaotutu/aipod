@@ -32,3 +32,17 @@ export interface ProcessingResult {
     error?: string;
     processingTime?: number; // 处理时间（毫秒）
 }
+
+/**
+ * 内容处理规则接口
+ */
+export interface ProcessingRule {
+    /** 规则名称 */
+    name: string;
+    /** 规则优先级,数字越大优先级越高 */
+    priority: number;
+    /** 规则条件判断函数 */
+    condition: (content: string, options: ProcessingOptions) => boolean;
+    /** 规则处理函数 */
+    process: (content: string, options: ProcessingOptions) => string;
+}

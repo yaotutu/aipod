@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import * as Parser from 'rss-parser';
 import axios from 'axios';
-import { RssSource, RssItem, RssProcessingResult } from './rss.interface';
-import { ProcessorService } from '../processor/processor.service';
+import * as Parser from 'rss-parser';
 import { ProcessingOptions } from '../processor/processor.interface';
+import { ProcessorService } from '../processor/processor.service';
+import { RssItem, RssProcessingResult, RssSource } from './rss.interface';
 
 @Injectable()
 export class RssService {
@@ -78,8 +78,10 @@ export class RssService {
                             extractLinks: true,
                             detectLanguage: true,
                             extractTopics: true,
+                            maxLength: 5000 // 限制内容长度
                         };
 
+                        // 使用处理器链处理内容
                         const processedResult = await this.processorService.processContent(
                             uniqueId,
                             content,
@@ -89,9 +91,7 @@ export class RssService {
                         return {
                             id: uniqueId,
                             title: item.title!,
-                            content: processedResult.success ?
-                                processedResult.content!.cleanContent :
-                                content,
+                            content: processedResult.success ? processedResult.content!.cleanContent : content,
                             link: item.link || item.guid || '',
                             pubDate: new Date(item.pubDate || new Date()),
                             author: item.creator || item.author || '未知作者',

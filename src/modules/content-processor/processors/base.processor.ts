@@ -1,9 +1,13 @@
-import { ContentProcessor, ProcessorOptions } from '../interfaces/content-processor.interface';
+import { ContentProcessor } from '../interfaces/content-processor.interface';
 
 /**
  * 内容处理器的抽象基类
  * 实现了责任链模式的基本框架和通用逻辑
  */
+export interface ProcessorOptions {
+    enabled?: boolean;
+}
+
 export abstract class BaseProcessor implements ContentProcessor {
     /** 责任链中的下一个处理器 */
     protected nextProcessor: ContentProcessor | null = null;
@@ -14,8 +18,11 @@ export abstract class BaseProcessor implements ContentProcessor {
      * 构造函数
      * @param options 处理器配置选项，默认启用处理器
      */
-    constructor(options: ProcessorOptions = { enabled: true }) {
-        this.options = options;
+    constructor(options: ProcessorOptions = {}) {
+        this.options = {
+            enabled: true,
+            ...options
+        };
     }
 
     /**
@@ -35,15 +42,10 @@ export abstract class BaseProcessor implements ContentProcessor {
      * @returns 处理后的内容
      */
     process(content: string): string {
-        // 如果处理器被禁用，直接传递给下一个处理器
         if (!this.options.enabled) {
-            return this.nextProcessor ? this.nextProcessor.process(content) : content;
+            return content;
         }
-
-        // 处理当前内容
-        const processedContent = this.processContent(content);
-        // 传递给下一个处理器
-        return this.nextProcessor ? this.nextProcessor.process(processedContent) : processedContent;
+        return this.processContent(content);
     }
 
     /**

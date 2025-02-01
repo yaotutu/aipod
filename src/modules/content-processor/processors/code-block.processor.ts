@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import type { Element } from 'domhandler';
+import { Element } from 'domhandler';
 import { BaseProcessor } from './base.processor';
 
 /**
@@ -12,7 +12,7 @@ import { BaseProcessor } from './base.processor';
  */
 export interface CodeBlockOptions {
     /** 是否启用处理器 */
-    enabled: boolean;
+    enabled?: boolean;
     /** 是否移除代码内容 */
     removeCode?: boolean;
     /** 是否保留代码说明文本 */
@@ -36,20 +36,23 @@ export interface CodeBlockOptions {
  */
 export class CodeBlockProcessor extends BaseProcessor {
     // TODO: 扩展支持更多代码块标签
-    private readonly defaultCodeBlockTags = ['pre', 'code'];
-    private readonly defaultTemplate = '[这是一段{language}代码，{summary}]';
+    protected defaultCodeBlockTags = ['pre code'];
+    protected defaultTemplate = '[这是一段{language}代码，{summary}]';
 
-    constructor(options: CodeBlockOptions = { enabled: true }) {
+    constructor(options: CodeBlockOptions = {}) {
         super(options);
     }
 
     protected processContent(content: string): string {
-        const $ = cheerio.load(content);
+        const $ = cheerio.load(content, {
+            xml: true,
+            decodeEntities: false
+        } as cheerio.CheerioOptions);
+
         const options = this.options as CodeBlockOptions;
         const codeBlockTags = options.codeBlockTags || this.defaultCodeBlockTags;
         const template = options.descriptionTemplate || this.defaultTemplate;
 
-        // TODO: 优化代码块嵌套处理逻辑
         codeBlockTags.forEach(tag => {
             $(tag).each((_, element) => {
                 if (element.type === 'tag') {
@@ -60,16 +63,20 @@ export class CodeBlockProcessor extends BaseProcessor {
                     if (options.removeCode) {
                         const summary = this.generateCodeSummary(code, language);
                         const description = template
-                            .replace('{language}', language || '代码')
+                            .replace('{language}', language ? language.toLowerCase() : '未知语言')
                             .replace('{summary}', summary);
 
-                        $element.replaceWith(description);
+                        if (tag === 'code') {
+                            $element.replaceWith(description);
+                        } else {
+                            $element.parent().replaceWith(description);
+                        }
                     }
                 }
             });
         });
 
-        return $.html();
+        return $.html().trim();
     }
 
     /**
@@ -79,23 +86,19 @@ export class CodeBlockProcessor extends BaseProcessor {
      * - [ ] 实现机器学习模型辅助识别
      * - [ ] 支持混合语言代码识别
      */
-    private detectLanguage($element: cheerio.Cheerio<Element>): string {
-        // 从class属性中检测语言
+    protected detectLanguage($element: cheerio.Cheerio<Element>): string {
         const classAttr = $element.attr('class') || '';
-        const languageMatch = classAttr.match(/language[-\s]?(\w+)/i);
-        if (languageMatch) {
-            return languageMatch[1];
+        const match = classAttr.match(/language-(\w+)/);
+        if (match) {
+            return match[1];
         }
 
-        // 从data-language属性检测
         const dataLang = $element.attr('data-language');
         if (dataLang) {
             return dataLang;
         }
 
-        // TODO: 改进语言推测算法的准确性
-        const code = $element.text().trim();
-        return this.guessLanguage(code);
+        return '';
     }
 
     /**
@@ -125,24 +128,31 @@ export class CodeBlockProcessor extends BaseProcessor {
      * - [ ] 添加代码功能描述生成
      * - [ ] 支持多语言代码概要模板
      */
-    private generateCodeSummary(code: string, language: string): string {
-        // TODO: 优化注释提取逻辑
+    protected generateCodeSummary(code: string, language: string): string {
+        // 移除注释
         code = code.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
 
-        // TODO: 添加更多代码特征识别
-        if (code.includes('function') || code.includes('def ')) {
+        // 函数定义检测
+        if (code.includes('function') || code.includes('def ') ||
+            code.includes('=>') || code.includes('fn ')) {
             return '定义了函数';
         }
+
+        // 类定义检测
         if (code.includes('class ')) {
             return '定义了类';
         }
+
+        // 导入语句检测
         if (code.includes('import ') || code.includes('require')) {
             return '包含依赖导入';
         }
+
+        // 输出语句检测
         if (code.includes('console.log') || code.includes('print')) {
             return '包含输出语句';
         }
 
-        return '包含代码示例';
+        return '包含代码片段';
     }
 } 

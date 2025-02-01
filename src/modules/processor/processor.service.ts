@@ -1,17 +1,102 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-const readingTime = require('reading-time');
 import {
+    ContentMetadata,
     ProcessedContent,
     ProcessingOptions,
     ProcessingResult,
-    ContentMetadata,
+    ProcessingRule
 } from './processor.interface';
+const readingTime = require('reading-time');
 
 @Injectable()
 export class ProcessorService {
     private readonly logger = new Logger(ProcessorService.name);
+    private readonly rules: ProcessingRule[] = [];
 
+    constructor() {
+        // 注册默认的处理规则
+        this.registerDefaultRules();
+    }
+
+    /**
+     * 注册处理规则
+     * @param rule 要注册的处理规则
+     */
+    registerRule(rule: ProcessingRule) {
+        this.rules.push(rule);
+    }
+
+    /**
+     * 注册默认的处理规则
+     */
+    private registerDefaultRules() {
+        // HTML清理规则
+        this.registerRule({
+            name: 'htmlCleaner',
+            priority: 100,
+            condition: (content: string, options: ProcessingOptions) => true,
+            process: (content: string, options: ProcessingOptions) => {
+                const $ = cheerio.load(content);
+                $('script, style').remove();
+                if (options.removeImages) {
+                    $('img').remove();
+                }
+                return $.root().html() || content;
+            }
+        });
+
+        // 链接处理规则
+        this.registerRule({
+            name: 'linkProcessor',
+            priority: 90,
+            condition: (content: string, options: ProcessingOptions) => options.extractLinks === true,
+            process: (content: string, options: ProcessingOptions) => {
+                const $ = cheerio.load(content);
+                $('a').each((_, elem) => {
+                    const $elem = $(elem);
+                    const href = $elem.attr('href');
+                    if (href) {
+                        $elem.after(` (${href}) `);
+                    }
+                });
+                return $.root().html() || content;
+            }
+        });
+
+        // 文本提取规则
+        this.registerRule({
+            name: 'textExtractor',
+            priority: 80,
+            condition: (content: string, options: ProcessingOptions) => true,
+            process: (content: string, options: ProcessingOptions) => {
+                const $ = cheerio.load(content);
+                let text = $('body').text();
+                text = text.replace(/\s+/g, ' ').trim();
+                return text;
+            }
+        });
+
+        // 内容长度限制规则
+        this.registerRule({
+            name: 'lengthLimiter',
+            priority: 70,
+            condition: (content: string, options: ProcessingOptions) => !!options.maxLength,
+            process: (content: string, options: ProcessingOptions) => {
+                if (options.maxLength && content.length > options.maxLength) {
+                    return content.slice(0, options.maxLength) + '...';
+                }
+                return content;
+            }
+        });
+    }
+
+    /**
+     * 处理内容
+     * @param id 内容ID
+     * @param content 原始内容
+     * @param options 处理选项
+     */
     async processContent(
         id: string,
         content: string,
@@ -20,31 +105,36 @@ export class ProcessorService {
         const startTime = Date.now();
 
         try {
-            const cleanContent = this.cleanHtml(content, options);
-            const extractedText = this.extractText(cleanContent);
+            // 按优先级排序规则
+            const sortedRules = [...this.rules].sort((a, b) => b.priority - a.priority);
 
-            if (!extractedText.trim()) {
-                return {
-                    success: false,
-                    error: '提取的文本内容为空',
-                    processingTime: Date.now() - startTime,
-                };
+            // 依次应用符合条件的规则
+            let processedContent = content;
+            for (const rule of sortedRules) {
+                if (rule.condition(processedContent, options)) {
+                    try {
+                        processedContent = rule.process(processedContent, options);
+                        this.logger.debug(`规则 ${rule.name} 处理完成`);
+                    } catch (error) {
+                        this.logger.warn(`规则 ${rule.name} 处理失败: ${error.message}`);
+                    }
+                }
             }
 
-            const metadata = await this.generateMetadata(extractedText, options);
+            const metadata = await this.generateMetadata(processedContent, options);
 
-            const processedContent: ProcessedContent = {
+            const result: ProcessedContent = {
                 id,
                 originalContent: content,
-                cleanContent,
-                extractedText,
+                cleanContent: processedContent,
+                extractedText: processedContent,
                 metadata,
                 processingDate: new Date(),
             };
 
             return {
                 success: true,
-                content: processedContent,
+                content: result,
                 processingTime: Date.now() - startTime,
             };
         } catch (error) {
@@ -55,48 +145,6 @@ export class ProcessorService {
                 processingTime: Date.now() - startTime,
             };
         }
-    }
-
-    private cleanHtml(content: string, options: ProcessingOptions): string {
-        const $ = cheerio.load(content);
-
-        // 移除脚本和样式标签
-        $('script, style').remove();
-
-        // 根据选项移除图片标签
-        if (options.removeImages) {
-            $('img').remove();
-        }
-
-        // 处理链接
-        if (options.extractLinks) {
-            $('a').each((_, elem) => {
-                const $elem = $(elem);
-                const href = $elem.attr('href');
-                if (href) {
-                    $elem.after(` (${href}) `);
-                }
-            });
-        }
-
-        // 规范化空白字符
-        const html = $.root().html();
-        return html ? html.replace(/\s+/g, ' ').trim() : '';
-    }
-
-    private extractText(html: string): string {
-        const $ = cheerio.load(html);
-
-        // 提取所有文本内容
-        let text = $('body').text();
-
-        // 清理和规范化文本
-        text = text
-            .replace(/\s+/g, ' ')
-            .replace(/\n+/g, '\n')
-            .trim();
-
-        return text;
     }
 
     private async generateMetadata(
@@ -112,36 +160,36 @@ export class ProcessorService {
             wordCount: text.split(/\s+/).length,
             readingTime: Math.ceil(stats.minutes),
             keyPhrases,
-            language: 'zh', // 默认使用中文
-            mainTopics,     // 总是提供主题
+            language: 'zh',
+            mainTopics,
             contentType: this.detectContentType(text),
             confidence: 0.85,
             quality
         };
     }
 
-    private assessContentQuality(text: string): number {
-        // 基于多个维度评估内容质量
-        const lengthScore = Math.min(text.length / 1000, 1); // 长度评分
-        const structureScore = text.split(/\n\s*\n/).length > 3 ? 1 : 0.5; // 结构评分
-        const diversityScore = new Set(text.split(/\s+/)).size / text.split(/\s+/).length; // 词汇丰富度
-
-        return (lengthScore + structureScore + diversityScore) / 3;
-    }
-
     private extractKeyPhrases(text: string): string[] {
-        // 简单的关键词提取实现
         const words = text.toLowerCase().match(/\b\w{4,}\b/g) || [];
         const wordFreq = new Map<string, number>();
-
         words.forEach(word => {
             wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
         });
-
         return Array.from(wordFreq.entries())
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
             .map(([word]) => word);
+    }
+
+    private extractTopics(text: string): string[] {
+        // TODO: 实现主题提取逻辑
+        return [];
+    }
+
+    private assessContentQuality(text: string): number {
+        const lengthScore = Math.min(text.length / 1000, 1);
+        const structureScore = text.split(/\n\s*\n/).length > 3 ? 1 : 0.5;
+        const diversityScore = new Set(text.split(/\s+/)).size / text.split(/\s+/).length;
+        return (lengthScore + structureScore + diversityScore) / 3;
     }
 
     private detectContentType(text: string): 'article' | 'news' | 'blog' | 'other' {
@@ -155,13 +203,6 @@ export class ProcessorService {
         } else if (paragraphs > 3) {
             return 'blog';
         }
-
         return 'other';
-    }
-
-    private extractTopics(text: string): string[] {
-        // TODO: 实现更复杂的主题提取算法
-        // 当前使用简单的频率分析
-        return this.extractKeyPhrases(text);
     }
 }
